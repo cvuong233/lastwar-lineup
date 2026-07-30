@@ -14,6 +14,12 @@ actually writes to `players.json`.
 ## Endpoints
 
 - `GET /health` — health check for Railway.
+- `GET /api/players` — returns the full current `players.json` content, no
+  auth required (same data that was previously public via GitHub Pages).
+  Cached in-memory for 5 seconds to avoid hammering the GitHub API if many
+  people load the page at once. The frontend now reads from here instead of
+  fetching `players.json` as a static file, so data updates show up
+  immediately without needing a redeploy of the frontend.
 - `POST /api/login` — body `{"username": "...", "password": "..."}`.
   Returns `{"token": "<jwt>", "expires_in": <seconds>}` on success (401 on
   failure, 429 if a client IP has failed 5 times in the last 5 minutes).

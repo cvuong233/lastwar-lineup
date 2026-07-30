@@ -112,6 +112,27 @@ def health():
     return jsonify({"status": "ok"})
 
 
+# Short-lived cache so a burst of page loads doesn't hammer the GitHub API -
+# not for correctness (GitHub itself is always the source of truth), just
+# politeness. A save always re-fetches fresh from GitHub regardless of this.
+_players_cache = {"data": None, "fetched_at": 0}
+PLAYERS_CACHE_TTL = 5  # seconds
+
+
+@app.route("/api/players", methods=["GET"])
+def get_players():
+    now = time.time()
+    if _players_cache["data"] is not None and (now - _players_cache["fetched_at"]) < PLAYERS_CACHE_TTL:
+        return jsonify(_players_cache["data"])
+    try:
+        data, _sha = _github_get()
+    except requests.RequestException as e:
+        return jsonify({"error": "github_get_failed", "detail": str(e)}), 502
+    _players_cache["data"] = data
+    _players_cache["fetched_at"] = now
+    return jsonify(data)
+
+
 @app.route("/api/login", methods=["POST"])
 def login():
     ip = _client_ip()

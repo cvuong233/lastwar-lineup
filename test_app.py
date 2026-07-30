@@ -190,3 +190,55 @@ def test_cors_header_present():
     c = client()
     r = c.get("/health")
     assert r.headers.get("Access-Control-Allow-Origin") == "*"
+
+
+def test_get_players_success():
+    app_module._players_cache["data"] = None
+    app_module._players_cache["fetched_at"] = 0
+    c = client()
+    with patch("app.requests.get", return_value=make_get_response(SAMPLE_DATA)) as mget:
+        r = c.get("/api/players")
+    assert r.status_code == 200
+    assert r.get_json() == SAMPLE_DATA
+    assert mget.call_count == 1
+
+
+def test_get_players_uses_short_cache():
+    app_module._players_cache["data"] = None
+    app_module._players_cache["fetched_at"] = 0
+    c = client()
+    with patch("app.requests.get", return_value=make_get_response(SAMPLE_DATA)) as mget:
+        c.get("/api/players")
+        c.get("/api/players")
+        c.get("/api/players")
+    assert mget.call_count == 1, "second/third call within TTL should hit cache, not GitHub"
+
+
+def test_get_players_cache_expires():
+    app_module._players_cache["data"] = None
+    app_module._players_cache["fetched_at"] = 0
+    c = client()
+    with patch("app.requests.get", return_value=make_get_response(SAMPLE_DATA)) as mget:
+        c.get("/api/players")
+        app_module._players_cache["fetched_at"] -= (app_module.PLAYERS_CACHE_TTL + 1)
+        c.get("/api/players")
+    assert mget.call_count == 2, "expired cache should trigger a fresh GitHub fetch"
+
+
+def test_get_players_no_auth_required():
+    app_module._players_cache["data"] = None
+    app_module._players_cache["fetched_at"] = 0
+    c = client()
+    with patch("app.requests.get", return_value=make_get_response(SAMPLE_DATA)):
+        r = c.get("/api/players")  # no Authorization header
+    assert r.status_code == 200
+
+
+def test_get_players_github_failure():
+    app_module._players_cache["data"] = None
+    app_module._players_cache["fetched_at"] = 0
+    c = client()
+    with patch("app.requests.get", side_effect=app_module.requests.RequestException("boom")):
+        r = c.get("/api/players")
+    assert r.status_code == 502
+    assert r.get_json()["error"] == "github_get_failed"
